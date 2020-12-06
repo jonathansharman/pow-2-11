@@ -1,0 +1,259 @@
+import Graphics2D;
+import Graphics2DText;
+import Math;
+import Random;
+import TwoCansAlpha4;
+
+const U = 0;
+const L = 1;
+const D = 2;
+const R = 3;
+const ESC = 4;
+
+const N = 4;
+const X_RES = 640;
+const Y_RES = 480;
+const CELL_SIZE = 100;
+const PADDING = (Y_RES - 4 * CELL_SIZE) / 5;
+const X_LEFT = X_RES / 2 - N / 2 * (CELL_SIZE + PADDING) + PADDING / 2;
+const Y_TOP = Y_RES / 2 - N / 2 * (CELL_SIZE + PADDING) + PADDING / 2;
+const FONT_SIZE = 26;
+
+class MainScene : AbstractScene {
+	field grid;
+	field lock;
+
+	field pressed = [false, false, false, false, false];
+
+	static field emptyColor = [192, 192, 192];
+	static field colors =
+		[ [222, 127, 214]
+		, [127, 127, 255]
+		, [127, 199, 235]
+		, [151, 222, 127]
+		, [255, 233, 127]
+		, [248, 127, 147]
+		, [191, 0, 175]
+		, [0, 0, 255]
+		, [0, 144, 217]
+		, [48, 191, 0]
+		, [255, 213, 0]
+		, [242, 0, 40]
+		, [124, 0, 113]
+		, [0, 0, 166]
+		, [0, 93, 141]
+		, [31, 124, 0]
+		, [166, 138, 0]
+		, [157, 0, 26]
+		];
+
+	field labels = [];
+
+	function reset() {
+		this.grid = [];
+		this.lock = [];
+		for (r = 0; r < N; ++r) {
+			this.grid.add([]);
+			this.lock.add([]);
+			for (c = 0; c < N; ++c) {
+				this.grid[r].add(0);
+				this.lock[r].add(false);
+			}
+		}
+		this.addTile();
+		this.addTile();
+	}
+
+	constructor() {
+		this.reset();
+
+		blackFont = FontResource.fromSystem('Arial').getRenderer().setColor(0, 0, 0).setSize(FONT_SIZE);
+		whiteFont = FontResource.fromSystem('Arial').getRenderer().setColor(255, 255, 255).setSize(FONT_SIZE);
+		number = 2;
+		for (i = 0; i < MainScene.colors.length; ++i) {
+			bgColor = MainScene.colors[i];
+			font = bgColor[0] + bgColor[1] + bgColor[2] > 384 ? blackFont : whiteFont;
+			this.labels.add(font.render(number));
+			number *= 2;
+		}
+	}
+
+	function addTile() {
+		freeCount = 0;
+		for (row : this.grid) {
+			for (space : row) {
+				if (space == 0) {
+					++freeCount;
+				}
+			}
+		}
+		if (freeCount > 0) {
+			idx = Random.randomInt(freeCount);
+			for (row : this.grid) {
+				for (c = 0; c < N; ++c) {
+					if (row[c] == 0) {
+						if (idx == 0) {
+							row[c] = Random.randomInt(1, 3);
+							return;
+						}
+						--idx;
+					}
+				}
+			}
+		}
+	}
+	function push(r, c, dir) {
+		if (this.grid[r][c] == 0) return false;
+
+		moved = false;
+		switch (dir) {
+			case U:
+				while (r > 0 && this.grid[r - 1][c] == 0) {
+					this.grid[r - 1][c] = this.grid[r][c];
+					this.grid[r][c] = 0;
+					--r;
+					moved = true;
+				}
+				if (r > 0 && this.grid[r - 1][c] == this.grid[r][c] && !this.lock[r - 1][c]) {
+					++this.grid[r - 1][c];
+					this.grid[r][c] = 0;
+					this.lock[r - 1][c] = true;
+					moved = true;
+				}
+				break;
+			case D:
+				while (r < N - 1 && this.grid[r + 1][c] == 0) {
+					this.grid[r + 1][c] = this.grid[r][c];
+					this.grid[r][c] = 0;
+					++r;
+					moved = true;
+				}
+				if (r < N - 1 && this.grid[r + 1][c] == this.grid[r][c] && !this.lock[r + 1][c]) {
+					++this.grid[r + 1][c];
+					this.grid[r][c] = 0;
+					this.lock[r + 1][c] = true;
+					moved = true;
+				}
+				break;
+			case L:
+				while (c > 0 && this.grid[r][c - 1] == 0) {
+					this.grid[r][c - 1] = this.grid[r][c];
+					this.grid[r][c] = 0;
+					--c;
+					moved = true;
+				}
+				if (c > 0 && this.grid[r][c - 1] == this.grid[r][c] && !this.lock[r][c - 1]) {
+					++this.grid[r][c - 1];
+					this.grid[r][c] = 0;
+					this.lock[r][c - 1] = true;
+					moved = true;
+				}
+				break;
+			case R:
+				while (c < N - 1 && this.grid[r][c + 1] == 0) {
+					this.grid[r][c + 1] = this.grid[r][c];
+					this.grid[r][c] = 0;
+					++c;
+					moved = true;
+				}
+				if (c < N - 1 && this.grid[r][c + 1] == this.grid[r][c] && !this.lock[r][c + 1]) {
+					++this.grid[r][c + 1];
+					this.grid[r][c] = 0;
+					this.lock[r][c + 1] = true;
+					moved = true;
+				}
+				break;
+		}
+		return moved;
+	}
+
+	function update(inputManager, events) {
+		pressed = [false, false, false, false, false];
+
+		if (inputManager.isKeyPressed(KeyboardKey.ESCAPE)) {
+			pressed[ESC] = true;
+			if (!this.pressed[ESC]) {
+				this.reset();
+			}
+		}
+
+		moved = false;
+		if (inputManager.isKeyPressed(KeyboardKey.UP)) {
+			pressed[U] = true;
+			if (!this.pressed[U]) {
+				for (r = 1; r < N; ++r) {
+					for (c = 0; c < N; ++c) {
+						result = this.push(r, c, U);
+						moved = moved || result;
+					}
+				}
+			}
+		}
+		if (inputManager.isKeyPressed(KeyboardKey.DOWN)) {
+			pressed[D] = true;
+			if (!this.pressed[D]) {
+				for (r = N - 2; r >= 0; --r) {
+					for (c = 0; c < N; ++c) {
+						result = this.push(r, c, D);
+						moved = moved || result;
+					}
+				}
+			}
+		}
+		if (inputManager.isKeyPressed(KeyboardKey.LEFT)) {
+			pressed[L] = true;
+			if (!this.pressed[L]) {
+				for (c = 1; c < N; ++c) {
+					for (r = 0; r < N; ++r) {
+						result = this.push(r, c, L);
+						moved = moved || result;
+					}
+				}
+			}
+		}
+		if (inputManager.isKeyPressed(KeyboardKey.RIGHT)) {
+			pressed[R] = true;
+			if (!this.pressed[R]) {
+				for (c = N - 2; c >= 0; --c) {
+					for (r = 0; r < N; ++r) {
+						result = this.push(r, c, R);
+						moved = moved || result;
+					}
+				}
+			}
+		}
+		this.pressed = pressed;
+
+		if (moved) {
+			this.addTile();
+
+			// Unlock combining.
+			for (row : this.lock) {
+				for (c = 0; c < N; ++c) {
+					row[c] = false;
+				}
+			}
+		}
+	}
+
+	function render() {
+		Graphics2D.Draw.fill(255, 255, 255);
+
+		for (r = 0; r < N; ++r) {
+			for (c = 0; c < N; ++c) {
+				x = X_LEFT + (CELL_SIZE + PADDING) * c;
+				y = Y_TOP + (CELL_SIZE + PADDING) * r;
+
+				value = this.grid[r][c];
+
+				color = value == 0 ? MainScene.emptyColor : MainScene.colors[(value - 1) % MainScene.colors.length];
+				Graphics2D.Draw.rectangle(x, y, CELL_SIZE, CELL_SIZE, color[0], color[1], color[2]);
+
+				if (value > 0) {
+					label = this.labels[value - 1];
+					label.draw(x + (CELL_SIZE - label.width) / 2, y + (CELL_SIZE - label.height) / 2);
+				}
+			}
+		}
+	}
+}
